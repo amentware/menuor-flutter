@@ -7,6 +7,8 @@ void main() {
   WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
   
+  debugPrint('App initializing...');
+
   // Set system UI overlay style for white status bar and navigation bar with dark content
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
@@ -24,8 +26,10 @@ void main() {
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]).then((_) {
+    debugPrint('Running app...');
     runApp(const MenuorApp());
     FlutterNativeSplash.remove();
+    debugPrint('Splash screen removed');
   });
 }
 
@@ -34,6 +38,7 @@ class MenuorApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    debugPrint('Building MenuorApp');
     return MaterialApp(
       title: 'Menuor',
       debugShowCheckedModeBanner: false,

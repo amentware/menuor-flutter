@@ -12,7 +12,7 @@ class WebViewScreen extends StatefulWidget {
 }
 
 class _WebViewScreenState extends State<WebViewScreen> {
-  late final WebViewController _controller;
+  WebViewController? _controller;
   bool _isLoading = true;
   bool _hasError = false;
   String? _errorMessage;
@@ -22,73 +22,122 @@ class _WebViewScreenState extends State<WebViewScreen> {
   @override
   void initState() {
     super.initState();
-    _initializeWebView();
-    _checkConnectivity();
+    debugPrint('WebViewScreen - initState called');
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      debugPrint('WebViewScreen - Post frame callback');
+      _initializeWebView();
+      _checkConnectivity();
+    });
   }
 
   void _initializeWebView() {
-    _controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onProgress: (int progress) {
-            // Update loading progress if needed
-          },
-          onPageStarted: (String url) {
-            setState(() {
-              _isLoading = true;
-              _hasError = false;
-            });
-          },
-          onPageFinished: (String url) {
-            setState(() {
-              _isLoading = false;
-            });
-          },
-          onWebResourceError: (WebResourceError error) {
-            setState(() {
-              _isLoading = false;
-              _hasError = true;
-              _errorMessage = error.description;
-            });
-          },
-          onNavigationRequest: (NavigationRequest request) {
-            // Allow navigation within the same domain
-            if (request.url.startsWith('https://themenuor.web.app/')) {
-              return NavigationDecision.navigate;
-            }
-            // For external links, open in external browser
-            _launchURL(request.url);
-            return NavigationDecision.prevent;
-          },
-        ),
-      )
-      ..loadRequest(Uri.parse(_url));
+    debugPrint('WebViewScreen - Initializing WebView');
+    try {
+      final controller = WebViewController()
+        ..setJavaScriptMode(JavaScriptMode.unrestricted)
+        ..setBackgroundColor(Colors.white)
+        ..setNavigationDelegate(
+          NavigationDelegate(
+            onProgress: (int progress) {
+              debugPrint('WebView loading progress: $progress%');
+            },
+            onPageStarted: (String url) {
+              debugPrint('Page started loading: $url');
+              if (mounted) {
+                setState(() {
+                  _isLoading = true;
+                  _hasError = false;
+                });
+              }
+            },
+            onPageFinished: (String url) {
+              debugPrint('Page finished loading: $url');
+              if (mounted) {
+                setState(() {
+                  _isLoading = false;
+                });
+              }
+            },
+            onWebResourceError: (WebResourceError error) {
+              debugPrint('WebView error: ${error.description}');
+              if (mounted) {
+                setState(() {
+                  _isLoading = false;
+                  _hasError = true;
+                  _errorMessage = '${error.errorType}: ${error.description}';
+                });
+              }
+            },
+            onNavigationRequest: (NavigationRequest request) {
+              debugPrint('Navigation request to: ${request.url}');
+              if (request.url.startsWith('https://themenuor.web.app/')) {
+                return NavigationDecision.navigate;
+              }
+              _launchURL(request.url);
+              return NavigationDecision.prevent;
+            },
+          ),
+        );
+      
+      debugPrint('Loading URL: $_url');
+      controller.loadRequest(Uri.parse(_url));
+      
+      if (mounted) {
+        setState(() {
+          _controller = controller;
+          debugPrint('WebViewController set');
+        });
+      }
+    } catch (e, stackTrace) {
+      debugPrint('Error initializing WebView: $e');
+      debugPrint('Stack trace: $stackTrace');
+      if (mounted) {
+        setState(() {
+          _hasError = true;
+          _errorMessage = 'Failed to initialize WebView: $e';
+        });
+      }
+    }
   }
 
   Future<void> _checkConnectivity() async {
-    final connectivityResult = await Connectivity().checkConnectivity();
-    if (connectivityResult == ConnectivityResult.none) {
-      setState(() {
-        _hasError = true;
-        _errorMessage = 'No internet connection';
-      });
+    try {
+      final connectivityResult = await Connectivity().checkConnectivity();
+      debugPrint('Connectivity result: $connectivityResult');
+      if (connectivityResult == ConnectivityResult.none) {
+        if (mounted) {
+          setState(() {
+            _hasError = true;
+            _errorMessage = 'No internet connection';
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error checking connectivity: $e');
     }
   }
 
   Future<void> _launchURL(String url) async {
     final Uri uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        debugPrint('Cannot launch URL: $url');
+      }
+    } catch (e) {
+      debugPrint('Error launching URL: $e');
     }
   }
 
   Future<void> _refresh() async {
-    await _controller.reload();
+    debugPrint('Refreshing WebView');
+    await _controller?.reload();
   }
 
   @override
   Widget build(BuildContext context) {
+    debugPrint('WebViewScreen - Building widget, hasError: $_hasError, isLoading: $_isLoading');
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
         statusBarColor: Colors.white,
@@ -110,7 +159,18 @@ class _WebViewScreenState extends State<WebViewScreen> {
   Widget _buildWebView() {
     return Stack(
       children: [
-        WebViewWidget(controller: _controller),
+        if (_controller != null)
+          WebViewWidget(controller: _controller!)
+        else
+          const Center(
+            child: Text(
+              'Initializing WebView...',
+              style: TextStyle(
+                fontSize: 16,
+                color: Color(0xFF757575),
+              ),
+            ),
+          ),
         if (_isLoading) _buildLoadingWidget(),
       ],
     );
@@ -174,11 +234,14 @@ class _WebViewScreenState extends State<WebViewScreen> {
             const SizedBox(height: 24),
             ElevatedButton.icon(
               onPressed: () {
+                debugPrint('Retry button pressed');
                 setState(() {
                   _hasError = false;
                   _errorMessage = null;
+                  _isLoading = true;
                 });
                 _initializeWebView();
+                _checkConnectivity();
               },
               icon: const Icon(Icons.refresh),
               label: const Text('Try Again'),
